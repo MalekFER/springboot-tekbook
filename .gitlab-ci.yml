@@ -1,0 +1,44 @@
+stages:
+  - build
+  - test
+  - package
+
+default:
+  cache:
+    key:
+      files:
+        - pom.xml
+    paths:
+      - .m2/repository
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  DOCKER_TLS_CERTDIR: "/certs"
+
+build-app:
+  stage: build
+  image: maven:3.9-eclipse-temurin-21
+  script:
+    - mvn -B clean package -DskipTests
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 week
+
+unit-tests:
+  stage: test
+  image: maven:3.9-eclipse-temurin-21
+  script:
+    - mvn -B test
+
+build-image:
+  stage: package
+  image: docker:27
+  services:
+    - docker:27-dind
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
